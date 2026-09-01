@@ -45,6 +45,18 @@ const allItemKeys = (step) => [
   ...(step.chain || []).flatMap((c) => (step.chainStages || []).map((s) => `${c.k}.${s.s}`)),
 ];
 
+/* Every trackable key, in the order the checklist wants them done. */
+function orderedItems() {
+  const out = [];
+  for (const step of STEPS) {
+    for (const it of step.items || []) out.push({ key: it.k, label: it.l, step });
+    for (const c of step.chain || [])
+      for (const st of step.chainStages || [])
+        out.push({ key: `${c.k}.${st.s}`, label: `${c.l} — ${st.l.toLowerCase()}`, step });
+  }
+  return out;
+}
+
 const getP = (k) => state.progress.get(k) || { status: 'open', notes: '' };
 const isDone = (k) => ['found', 'norecord', 'na'].includes(getP(k).status);
 
@@ -149,6 +161,7 @@ function renderApp() {
       </div>
       <h1 class="thesis">${esc(CASE.question)}</h1>
       <p class="thesis-sub">${esc(CASE.objective)}</p>
+      <div id="next"></div>
       <nav class="strip" id="strip" aria-label="Steps"></nav>
     </header>
     <div class="shell">
@@ -224,6 +237,7 @@ async function saveProgress(key, patch) {
   const next = { ...cur, ...patch };
   state.progress.set(key, next);
   paintLedger();
+  paintNext();
   const { error } = await sb.from('diglio_progress').upsert(
     { user_id: state.user.id, item_key: key, status: next.status, notes: next.notes, updated_at: new Date().toISOString() },
     { onConflict: 'user_id,item_key' }
@@ -250,7 +264,24 @@ async function saveFact(key, patch) {
 function paint() {
   paintStrip();
   paintLedger();
+  paintNext();
   paintMain();
+}
+
+function paintNext() {
+  const el = $('#next');
+  if (!el) return;
+  const next = orderedItems().find((i) => getP(i.key).status === 'open');
+  if (!next) {
+    el.innerHTML = `<div class="next done"><span class="next-tag">Complete</span>
+      <span>Every item is accounted for. Check the open questions before you file.</span></div>`;
+    return;
+  }
+  el.innerHTML = `<button class="next" data-view="${next.step.id}">
+    <span class="next-tag">Do next</span>
+    <span class="next-label">${esc(next.label)}</span>
+    <span class="next-step">Step ${next.step.num}</span>
+  </button>`;
 }
 
 function stepStats(step) {

@@ -229,6 +229,34 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
   max-width: 60ch;
 }
 
+/* The next undone thing, stamped across the top of the file. */
+.next {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--ink);
+  border-left: 4px solid var(--seal);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.next:hover { background: var(--paper); }
+.next.done { cursor: default; border-left-color: var(--nil); }
+.next-tag {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--seal); white-space: nowrap;
+}
+.next.done .next-tag { color: var(--nil); }
+.next-label { flex: 1; font-size: 15px; line-height: 1.35; min-width: 0; }
+.next-step {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap;
+}
+
 /* The status strip: one boxed cell per step, doubling as nav. */
 .strip {
   display: flex;
@@ -644,6 +672,8 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
   .caption-bar { flex-wrap: nowrap; overflow-x: auto; gap: 0 18px; }
   .caption-bar > span { white-space: nowrap; }
   .caption-bar .spacer { display: none; }
+  .next { flex-wrap: wrap; gap: 4px 12px; }
+  .next-label { flex: 1 0 100%; order: 3; }
   .main { padding: 26px 20px 70px; }
   .masthead { padding: 18px 20px 0; }
   .fact-row { grid-template-columns: 1fr; }
