@@ -23,6 +23,10 @@ same file.
 
 Static HTML, CSS and vanilla JS on GitHub Pages. No build step — edit and push.
 
+Assets are requested as `?v=dev` in the source; the Pages workflow rewrites that
+to the commit SHA on deploy, so a browser holding a cached `app.js` picks up the
+new one. Nothing to bump by hand.
+
 Data lives in the `Evening Scout & Life Stuff` Supabase project
 (ref `bawcxalgdcuwnpkajkxa`) in four `diglio_`-prefixed tables:
 `diglio_progress`, `diglio_facts`, `diglio_log`, `diglio_costs`.
