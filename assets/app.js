@@ -1,6 +1,7 @@
 /* Diglio citizenship tracker — app shell.
-   Auth is Supabase email + password. Every read and write is scoped to the
-   signed-in user by RLS, so the anon key below is safe to publish. */
+   No sign-in: one shared set of rows, read and written with the anon key.
+   The page is unlisted and noindex, and RLS forbids deleting progress and
+   facts, so the worst a stray visitor can do is edit a checklist. */
 
 const SUPABASE_URL = 'https://bawcxalgdcuwnpkajkxa.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -21,7 +22,6 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 /* ---------- state ---------- */
 
 const state = {
-  user: null,
   progress: new Map(), // item_key -> {status, notes}
   facts: new Map(),    // fact_key -> {value, source}
   log: [],
@@ -75,75 +75,8 @@ function flash(text, isErr) {
 /* ---------- auth ---------- */
 
 async function boot() {
-  const { data } = await sb.auth.getSession();
-  state.user = data.session?.user ?? null;
-  sb.auth.onAuthStateChange((_e, session) => {
-    const next = session?.user ?? null;
-    const changed = next?.id !== state.user?.id;
-    state.user = next;
-    if (changed) render();
-  });
-  await render();
-}
-
-async function render() {
-  if (!state.user) { renderGate(); return; }
   renderApp();
   await loadAll();
-}
-
-function renderGate() {
-  document.body.innerHTML = `
-    <div class="gate">
-      <div class="gate-card">
-        <p class="eyebrow">In re: ${esc(CASE.subject)}</p>
-        <h1>${esc(CASE.question)}</h1>
-        <p class="sub">Sign in to open the evidence file.</p>
-        <form id="authform" novalidate>
-          <div class="field">
-            <label for="email">Email</label>
-            <input id="email" type="email" autocomplete="email" required>
-          </div>
-          <div class="field">
-            <label for="pw">Password</label>
-            <input id="pw" type="password" autocomplete="current-password" required minlength="8">
-          </div>
-          <button class="btn wide" type="submit" id="signin">Sign in</button>
-          <p class="msg" id="authmsg" role="status"></p>
-        </form>
-        <div class="gate-alt">
-          First time here?
-          <button class="linkbtn" id="signup">Create the account</button>
-        </div>
-      </div>
-    </div>
-    <div class="saveflag" id="saveflag"></div>`;
-
-  const msg = $('#authmsg');
-  const creds = () => ({ email: $('#email').value.trim(), password: $('#pw').value });
-
-  $('#authform').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    msg.className = 'msg';
-    msg.textContent = 'Checking…';
-    const { error } = await sb.auth.signInWithPassword(creds());
-    if (error) { msg.className = 'msg err'; msg.textContent = error.message; }
-  });
-
-  $('#signup').addEventListener('click', async () => {
-    const c = creds();
-    if (!c.email || c.password.length < 8) {
-      msg.className = 'msg err';
-      msg.textContent = 'Enter an email and a password of at least 8 characters, then press Create the account.';
-      return;
-    }
-    msg.className = 'msg';
-    msg.textContent = 'Creating…';
-    const { error } = await sb.auth.signUp(c);
-    if (error) { msg.className = 'msg err'; msg.textContent = error.message; return; }
-    msg.className = 'msg ok';
-    msg.textContent = 'Account created. If email confirmation is on, click the link, then sign in.';
-  });
 }
 
 /* ---------- app shell ---------- */
@@ -157,7 +90,6 @@ function renderApp() {
         <span><b>d.</b> ${esc(CASE.died)}</span>
         <span class="spacer"></span>
         <span><b>Statute</b> ${esc(CASE.statute)}</span>
-        <button class="linkbtn" id="signout" style="font-family:var(--mono);font-size:11px;letter-spacing:.07em">Sign out</button>
       </div>
       <h1 class="thesis">${esc(CASE.question)}</h1>
       <p class="thesis-sub">${esc(CASE.objective)}</p>
@@ -176,11 +108,6 @@ function renderApp() {
       <main class="main" id="main"></main>
     </div>
     <div class="saveflag" id="saveflag"></div>`;
-
-  $('#signout').addEventListener('click', async () => {
-    await sb.auth.signOut();
-    location.reload();
-  });
 
   const EXTRA = [
     ['pivot', 'The 1906 line'],
@@ -214,12 +141,11 @@ window.addEventListener('hashchange', () => {
 /* ---------- data ---------- */
 
 async function loadAll() {
-  const uid = state.user.id;
   const [p, f, l, c] = await Promise.all([
-    sb.from('diglio_progress').select('item_key,status,notes').eq('user_id', uid),
-    sb.from('diglio_facts').select('fact_key,value,source').eq('user_id', uid),
-    sb.from('diglio_log').select('*').eq('user_id', uid).order('entered_on', { ascending: false }),
-    sb.from('diglio_costs').select('*').eq('user_id', uid).order('spent_on', { ascending: false }),
+    sb.from('diglio_progress').select('item_key,status,notes'),
+    sb.from('diglio_facts').select('fact_key,value,source'),
+    sb.from('diglio_log').select('*').order('entered_on', { ascending: false }),
+    sb.from('diglio_costs').select('*').order('spent_on', { ascending: false }),
   ]);
 
   const firstErr = [p, f, l, c].find((r) => r.error);
@@ -239,8 +165,8 @@ async function saveProgress(key, patch) {
   paintLedger();
   paintNext();
   const { error } = await sb.from('diglio_progress').upsert(
-    { user_id: state.user.id, item_key: key, status: next.status, notes: next.notes, updated_at: new Date().toISOString() },
-    { onConflict: 'user_id,item_key' }
+    { item_key: key, status: next.status, notes: next.notes, updated_at: new Date().toISOString() },
+    { onConflict: 'item_key' }
   );
   flash(error ? 'Not saved' : 'Saved', !!error);
   if (error) console.error(error);
@@ -251,8 +177,8 @@ async function saveFact(key, patch) {
   const next = { ...cur, ...patch };
   state.facts.set(key, next);
   const { error } = await sb.from('diglio_facts').upsert(
-    { user_id: state.user.id, fact_key: key, value: next.value, source: next.source, updated_at: new Date().toISOString() },
-    { onConflict: 'user_id,fact_key' }
+    { fact_key: key, value: next.value, source: next.source, updated_at: new Date().toISOString() },
+    { onConflict: 'fact_key' }
   );
   flash(error ? 'Not saved' : 'Saved', !!error);
   if (error) console.error(error);
@@ -695,7 +621,6 @@ document.addEventListener('click', async (e) => {
 async function addLog(e) {
   e.preventDefault();
   const row = {
-    user_id: state.user.id,
     entered_on: $('#lg-date').value,
     title: $('#lg-title').value.trim(),
     source: $('#lg-source').value.trim(),
@@ -715,7 +640,6 @@ async function addLog(e) {
 async function addCost(e) {
   e.preventDefault();
   const row = {
-    user_id: state.user.id,
     spent_on: $('#ct-date').value,
     item: $('#ct-item').value.trim(),
     amount: Number($('#ct-amt').value),

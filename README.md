@@ -31,9 +31,14 @@ Data lives in the `Evening Scout & Life Stuff` Supabase project
 (ref `bawcxalgdcuwnpkajkxa`) in four `diglio_`-prefixed tables:
 `diglio_progress`, `diglio_facts`, `diglio_log`, `diglio_costs`.
 
-Every table has RLS on with a single policy — `auth.uid() = user_id` — so the
-anon key in `assets/app.js` is safe to publish. Signing in is email plus
-password; the account is created from the sign-in screen.
+There is no sign-in. The tracker is one shared set of rows read and written
+with the anon key, which is why `assets/app.js` can carry that key in the open.
+The page is unlisted and `noindex`, and RLS withholds `delete` on
+`diglio_progress` and `diglio_facts`, so the worst anyone who finds the URL can
+do is edit a checklist — they cannot wipe it.
+
+`OPEN-ACCESS.sql` is the migration that removed the per-user scoping. It has
+already been run; it is kept for the record.
 
 ## Editing the checklist
 
