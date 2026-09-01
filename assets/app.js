@@ -19,6 +19,10 @@ if (!window.supabase) {
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const DOC_BUCKET = 'diglio-docs';
+const DOC_MAX_BYTES = 25 * 1024 * 1024;
+const DOC_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'image/webp', 'image/heic'];
+
 /* ---------- state ---------- */
 
 const state = {
@@ -26,6 +30,7 @@ const state = {
   facts: new Map(),    // fact_key -> {value, source}
   log: [],
   costs: [],
+  docs: new Map(),     // item_key -> [{id, name, path, mime, size_bytes}]
   view: (location.hash || '').replace('#', '') || 's1',
 };
 
@@ -141,15 +146,22 @@ window.addEventListener('hashchange', () => {
 /* ---------- data ---------- */
 
 async function loadAll() {
-  const [p, f, l, c] = await Promise.all([
+  const [p, f, l, c, d] = await Promise.all([
     sb.from('diglio_progress').select('item_key,status,notes'),
     sb.from('diglio_facts').select('fact_key,value,source'),
     sb.from('diglio_log').select('*').order('entered_on', { ascending: false }),
     sb.from('diglio_costs').select('*').order('spent_on', { ascending: false }),
+    sb.from('diglio_docs').select('*').order('created_at', { ascending: true }),
   ]);
 
-  const firstErr = [p, f, l, c].find((r) => r.error);
+  const firstErr = [p, f, l, c, d].find((r) => r.error);
   if (firstErr) { flash('Load failed', true); console.error(firstErr.error); }
+
+  state.docs = new Map();
+  for (const row of d.data || []) {
+    if (!state.docs.has(row.item_key)) state.docs.set(row.item_key, []);
+    state.docs.get(row.item_key).push(row);
+  }
 
   state.progress = new Map((p.data || []).map((r) => [r.item_key, { status: r.status, notes: r.notes }]));
   state.facts = new Map((f.data || []).map((r) => [r.fact_key, { value: r.value, source: r.source }]));
@@ -183,6 +195,97 @@ async function saveFact(key, patch) {
   flash(error ? 'Not saved' : 'Saved', !!error);
   if (error) console.error(error);
   paint();
+}
+
+/* ---------- documents ---------- */
+
+const docsFor = (key) => state.docs.get(key) || [];
+
+function fileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function docUrl(path) {
+  return sb.storage.from(DOC_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
+function docsBlock(key) {
+  const rows = docsFor(key);
+  const list = rows.map((d) => `<li class="doc">
+    <a class="doc-name" href="${esc(docUrl(d.path))}" target="_blank" rel="noopener noreferrer">${esc(d.name)}</a>
+    <span class="doc-size">${esc(fileSize(d.size_bytes))}</span>
+    <button class="doc-remove" data-doc-remove="${esc(d.id)}" title="Remove from the list">Remove</button>
+  </li>`).join('');
+  return `<div class="docs" data-drop-for="${esc(key)}">
+    ${rows.length ? `<ul class="doclist">${list}</ul>` : ''}
+    <label class="attach">
+      <input type="file" multiple hidden accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff,.webp,.heic"
+        data-upload-for="${esc(key)}" aria-label="Attach files">
+      <span>${rows.length ? '+ Add another file' : '+ Attach a file'}</span>
+    </label>
+  </div>`;
+}
+
+async function uploadFiles(key, files) {
+  const list = [...files];
+  if (!list.length) return;
+
+  for (const file of list) {
+    if (file.size > DOC_MAX_BYTES) {
+      flash(`${file.name} is over 25 MB`, true);
+      continue;
+    }
+    if (file.type && !DOC_TYPES.includes(file.type)) {
+      flash(`${file.name} is not a PDF or image`, true);
+      continue;
+    }
+
+    flash(`Uploading ${file.name}…`);
+    const ext = (file.name.match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+    const path = `${crypto.randomUUID()}${ext}`;
+
+    const up = await sb.storage.from(DOC_BUCKET).upload(path, file, {
+      contentType: file.type || 'application/octet-stream',
+      upsert: false,
+    });
+    if (up.error) { flash('Upload failed', true); console.error(up.error); continue; }
+
+    const { data, error } = await sb.from('diglio_docs').insert({
+      item_key: key,
+      name: file.name,
+      path,
+      mime: file.type || '',
+      size_bytes: file.size,
+    }).select().single();
+
+    if (error) { flash('Upload failed', true); console.error(error); continue; }
+
+    if (!state.docs.has(key)) state.docs.set(key, []);
+    state.docs.get(key).push(data);
+    flash(`Attached ${file.name}`);
+  }
+  paintMain();
+}
+
+/* Removing takes the file out of the list but leaves the blob in storage, so a
+   stray visitor cannot destroy a scan that cost money to obtain. */
+async function removeDoc(id) {
+  const all = [...state.docs.values()].flat();
+  const row = all.find((d) => d.id === id);
+  if (!row) return;
+  if (!confirm(`Remove "${row.name}" from this item?\n\nThe file itself stays in storage.`)) return;
+
+  const { error } = await sb.from('diglio_docs').delete().eq('id', id);
+  if (error) { flash('Not removed', true); return; }
+
+  for (const [k, list] of state.docs) {
+    const i = list.findIndex((d) => d.id === id);
+    if (i > -1) { list.splice(i, 1); if (!list.length) state.docs.delete(k); break; }
+  }
+  flash('Removed');
+  paintMain();
 }
 
 /* ---------- painting ---------- */
@@ -278,6 +381,7 @@ function itemRow(it) {
         <textarea data-notes-for="${it.k}" aria-label="Notes — ${esc(it.l)}"
           placeholder="What you searched, what you found, where it is filed.">${esc(p.notes)}</textarea>
       </div>
+      ${docsBlock(it.k)}
     </div>
   </div>`;
 }
@@ -327,7 +431,7 @@ function chainTable(step) {
       return `<td><button class="tick" data-tick-for="${key}" aria-pressed="${on}"
         aria-label="${esc(c.l)} — ${esc(s.l)}">✓</button></td>`;
     }).join('');
-    return `<tr><td>${esc(c.l)}</td>${cells}</tr>`;
+    return `<tr><td>${esc(c.l)}${docsBlock(c.k)}</td>${cells}</tr>`;
   }).join('');
   return `<table class="chain">
     <thead><tr><th scope="col">Document</th>${heads}</tr></thead>
@@ -560,6 +664,31 @@ document.addEventListener('change', (e) => {
     saveProgress(t.dataset.statusFor, { status: t.value });
   }
   if (t.dataset.factFor) saveFact(t.dataset.factFor, { value: t.value });
+  if (t.dataset.uploadFor) {
+    uploadFiles(t.dataset.uploadFor, t.files);
+    t.value = '';
+  }
+});
+
+/* Drag a PDF straight onto an item or an apostille-chain row. */
+document.addEventListener('dragover', (e) => {
+  const zone = e.target.closest?.('[data-drop-for]');
+  if (!zone || !e.dataTransfer?.types?.includes('Files')) return;
+  e.preventDefault();
+  zone.classList.add('dropping');
+});
+
+document.addEventListener('dragleave', (e) => {
+  const zone = e.target.closest?.('[data-drop-for]');
+  if (zone && !zone.contains(e.relatedTarget)) zone.classList.remove('dropping');
+});
+
+document.addEventListener('drop', (e) => {
+  const zone = e.target.closest?.('[data-drop-for]');
+  if (!zone) return;
+  e.preventDefault();
+  zone.classList.remove('dropping');
+  if (e.dataTransfer?.files?.length) uploadFiles(zone.dataset.dropFor, e.dataTransfer.files);
 });
 
 /* Notes save on blur, not per keystroke. */
@@ -593,6 +722,9 @@ document.addEventListener('click', async (e) => {
     await saveProgress(key, { status: on ? 'open' : 'found' });
     return;
   }
+
+  const rm = e.target.closest('[data-doc-remove]');
+  if (rm) { removeDoc(rm.dataset.docRemove); return; }
 
   const dl = e.target.closest('[data-del-log]');
   if (dl) {

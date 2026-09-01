@@ -37,8 +37,15 @@ The page is unlisted and `noindex`, and RLS withholds `delete` on
 `diglio_progress` and `diglio_facts`, so the worst anyone who finds the URL can
 do is edit a checklist — they cannot wipe it.
 
-`OPEN-ACCESS.sql` is the migration that removed the per-user scoping. It has
-already been run; it is kept for the record.
+`SETUP.sql` is the whole database setup in one idempotent script — the removal
+of per-user scoping plus the document bucket. Safe to re-run.
+
+PDFs and scans attach to any checklist item and to any row of the apostille
+chain, by drag-and-drop or the file picker. Files go to the public
+`diglio-docs` bucket under random UUID filenames; `diglio_docs` maps them back
+to item keys. The bucket cannot be listed, and storage grants `insert` only —
+so "Remove" drops the row and leaves the object in place, and no visitor can
+delete a scan you paid for.
 
 ## Editing the checklist
 

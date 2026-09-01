@@ -440,6 +440,50 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.5; }
 .item-note { margin-top: 8px; }
 .item-note[hidden] { display: none; }
 
+/* ---------- Attached documents ---------- */
+
+.docs { margin-top: 8px; border-radius: 2px; }
+.docs.dropping {
+  outline: 2px dashed var(--seal);
+  outline-offset: 3px;
+  background: color-mix(in srgb, var(--seal) 7%, transparent);
+}
+
+.doclist { list-style: none; margin: 0 0 6px; padding: 0; }
+.doc {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--rule-2);
+  border-radius: 2px;
+  background: var(--card);
+  margin-bottom: 4px;
+}
+.doc-name { flex: 1; font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.doc-size {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--ink-3); white-space: nowrap;
+}
+.doc-remove {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap;
+}
+.doc-remove:hover { color: var(--stamp); }
+
+.attach {
+  display: inline-block;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3);
+  cursor: pointer;
+}
+.attach:hover { color: var(--seal); }
+.attach input:focus-visible + span { outline: 2px solid var(--seal); outline-offset: 2px; }
+
+/* In the apostille chain the document name column is left-aligned. */
+.chain td .docs { max-width: 320px; }
+
 /* ---------- Fact panels ---------- */
 
 .fact {
