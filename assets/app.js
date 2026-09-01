@@ -6,6 +6,16 @@ const SUPABASE_URL = 'https://bawcxalgdcuwnpkajkxa.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJhd2N4YWxnZGN1d25wa2Fqa3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNDYwNzEsImV4cCI6MjA5ODYyMjA3MX0.QhFaq71FKL_YvYT7B3PaPKh7hNxlBp6I2puaAuzswS4';
 
+if (!window.supabase) {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.body.innerHTML =
+      '<div class="gate"><div class="gate-card"><h1>Can’t reach Supabase</h1>' +
+      '<p class="sub">The database library did not load, so your saved research can’t be read. ' +
+      'Check the connection and reload.</p></div></div>';
+  });
+  throw new Error('supabase-js failed to load');
+}
+
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ---------- state ---------- */
@@ -16,8 +26,14 @@ const state = {
   facts: new Map(),    // fact_key -> {value, source}
   log: [],
   costs: [],
-  view: 's1',
+  view: (location.hash || '').replace('#', '') || 's1',
 };
+
+const VIEWS = new Set([
+  ...STEPS.map((s) => s.id),
+  'pivot', 'names', 'tree', 'log', 'costs', 'open',
+]);
+if (!VIEWS.has(state.view)) state.view = 's1';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) =>
@@ -166,14 +182,21 @@ function renderApp() {
     ([id, label]) => `<button class="navlink" data-view="${id}">${esc(label)}</button>`
   ).join('');
 
-  document.body.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-view]');
-    if (!t) return;
-    state.view = t.dataset.view;
-    paint();
-    if (window.innerWidth <= 900) $('#main').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
 }
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-view]');
+  if (!t) return;
+  state.view = t.dataset.view;
+  history.replaceState(null, '', '#' + state.view);
+  paint();
+  if (window.innerWidth <= 900) $('#main')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+window.addEventListener('hashchange', () => {
+  const v = (location.hash || '').replace('#', '');
+  if (VIEWS.has(v) && v !== state.view) { state.view = v; paint(); }
+});
 
 /* ---------- data ---------- */
 
