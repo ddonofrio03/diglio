@@ -3,9 +3,9 @@
    The page is unlisted and noindex, and RLS forbids deleting progress and
    facts, so the worst a stray visitor can do is edit a checklist. */
 
-const SUPABASE_URL = 'https://bawcxalgdcuwnpkajkxa.supabase.co';
-const SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJhd2N4YWxnZGN1d25wa2Fqa3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNDYwNzEsImV4cCI6MjA5ODYyMjA3MX0.QhFaq71FKL_YvYT7B3PaPKh7hNxlBp6I2puaAuzswS4';
+// Shared "TCG-DMD Overall" project; diglio tables live in the evening_scout schema.
+const SUPABASE_URL = 'https://utucjtnhdkewcgyvgvsj.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_4OrSCnTMRaXai768QwAqeQ_U7w7CPuT';
 
 if (!window.supabase) {
   document.addEventListener('DOMContentLoaded', () => {
@@ -17,7 +17,7 @@ if (!window.supabase) {
   throw new Error('supabase-js failed to load');
 }
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { db: { schema: 'evening_scout' } });
 
 const DOC_BUCKET = 'diglio-docs';
 const DOC_MAX_BYTES = 25 * 1024 * 1024;
